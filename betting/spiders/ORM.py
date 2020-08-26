@@ -20,6 +20,23 @@ class MarathonFootballTeam(Base):
   def __init__(self, value):
     self.Value = value
 
+class MarathonFootballMatchOdds(Base):
+  __tablename__ = 'marathon_football_match_odds'
+
+  Id = Column('id', Integer, primary_key=True)
+  Match = Column('match', Integer, ForeignKey('marathon_football_match.id'))
+  _1 = Column('_1', Float)
+  _x = Column('_x', Float)
+  _2 = Column('_2', Float)
+  Time = Column('time', DateTime)
+
+  def __init__(self, match_data):
+    self.Match = match_data['id']
+    self._1 = match_data['_1']
+    self._x = match_data['_x']
+    self._2 = match_data['_2']
+    self.Time = match_data['created']
+
 class MarathonFootballMatch(Base):
   __tablename__ = 'marathon_football_match'
 
@@ -27,9 +44,7 @@ class MarathonFootballMatch(Base):
   Home = Column('home', Integer, ForeignKey('marathon_football_team.id'))
   Away = Column('away', Integer, ForeignKey('marathon_football_team.id'))
   Time = Column('time', DateTime)
-  _1 = Column('_1', Float)
-  _x = Column('_x', Float)
-  _2 = Column('_2', Float)
+
   Created = Column('created', DateTime)
 
   def __init__(self, match):
@@ -37,10 +52,7 @@ class MarathonFootballMatch(Base):
     self.Home = Operations.GetOrCreateMarathonFootballTeam(match['home']).Id
     self.Away = Operations.GetOrCreateMarathonFootballTeam(match['away']).Id
     self.Time = match['time']
-    self._1 = match['_1']
-    self._x = match['_x']
-    self._2 = match['_2']
-    self.Created =  datetime.now().replace(microsecond=0)
+    self.Created = match['created']
 
 class Operations:
 
@@ -60,10 +72,20 @@ class Operations:
 
     return team
 
-  def SaveMarathonFootball(match):
-    if session.query(MarathonFootballMatch.Id).filter_by(Id=match['id']).scalar() == None:
-      session.add(MarathonFootballMatch(match))
+  def SaveMarathonFootball(match_data):
+    match = session.query(MarathonFootballMatch.Id).filter_by(Id=match_data['id']).first()
+    if match == None:
+      match = MarathonFootballMatch(match_data)
+      session.add(match)
       session.commit()
+
+    if '_1' in match_data and '_x' in match_data and '_2' in match_data:
+      match_odds = MarathonFootballMatchOdds(match_data)
+      session.add(match_odds)
+      session.commit()
+
+  def QueryMarathonFootballMatchOdds(match):
+    return session.query(MarathonFootballMatchOdds).filter_by(Match=match).all()
 
   def QueryMarathonFootballMatch():
     match = aliased(MarathonFootballMatch)
@@ -76,12 +98,12 @@ class Operations:
 
     return [{'id': match[0].Id,
           'time': match[0].Time,
-          '_1': match[0]._1,
-          '_x': match[0]._x,
-          '_2': match[0]._2,
           'created': match[0].Created,
           'home': match[1].Value,
-          'away': match[2].Value} for match in matches]
+          'away': match[2].Value,
+          'odds': [{'home': odds._1, 'draw': odds._x, 'away': odds._2, 'time': odds.Time}
+            for odds in Operations.QueryMarathonFootballMatchOdds(match[0].Id)]}
+            for match in matches]
 
 Base.metadata.create_all(engine)
 Session = sessionmaker()

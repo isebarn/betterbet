@@ -70,10 +70,12 @@ class RootSpider(scrapy.Spider):
         match['_1'], match['_x'], match['_2'] = event.xpath(
           ".//span[@data-selection-price]/text()").extract()[0:3]
 
+        match['created'] = datetime.now().replace(microsecond=0)
+
+        self.football_matches.append(match)
       except Exception as e:
         print(response.url, e)
 
-      self.football_matches.append(match)
 
   def errbacktest(self, failiure):
     pass
