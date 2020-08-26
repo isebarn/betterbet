@@ -3,8 +3,9 @@ import json
 from datetime import datetime
 from sqlalchemy import ForeignKey, desc, create_engine, func, Column, BigInteger, Integer, Float, String, Boolean, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, aliased
 from datetime import datetime
+from pprint import pprint
 
 engine = create_engine(os.environ.get('BETTING_DATABASE'), echo=False)
 Base = declarative_base()
@@ -64,11 +65,29 @@ class Operations:
       session.add(MarathonFootballMatch(match))
       session.commit()
 
+  def QueryMarathonFootballMatch():
+    match = aliased(MarathonFootballMatch)
+    home = aliased(MarathonFootballTeam)
+    away = aliased(MarathonFootballTeam)
+
+    matches = session.query(match, home, away
+      ).join(home, home.Id == match.Home
+      ).join(away, away.Id == match.Away).all()
+
+    return [{'id': match[0].Id,
+          'time': match[0].Time,
+          '_1': match[0]._1,
+          '_x': match[0]._x,
+          '_2': match[0]._2,
+          'created': match[0].Created,
+          'home': match[1].Value,
+          'away': match[2].Value} for match in matches]
+
 Base.metadata.create_all(engine)
 Session = sessionmaker()
 Session.configure(bind=engine)
 session = Session()
 MARATHON_FOOTBALL_TEAM_CACHE = {team.Value: team for team in  Operations.QueryMarathonFootballTeam()}
 if __name__ == "__main__":
-  print(os.environ.get('BETTING_DATABASE'))
+  pprint(Operations.QueryMarathonFootballMatch())
 

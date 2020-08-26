@@ -11,7 +11,7 @@ if __name__ == '__main__':
   from ORM import Operations
 
 else:
-  from dison.spiders.ORM import Operations
+  from betting.spiders.ORM import Operations
 
 MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 MONTH_DICT = {value:idx for idx, value in enumerate(MONTHS)}
