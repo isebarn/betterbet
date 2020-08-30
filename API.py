@@ -12,4 +12,13 @@ cors = CORS(app, resources={r"*": {"origins": os.environ.get('WEB')}})
 
 @app.route('/')
 def root():
-  return jsonify(ORM.Operations.QueryMarathonFootballMatch())
+  return jsonify(ORM.Operations.QueryFootballMatch())
+
+@app.route('/leagues')
+def leagues():
+  return jsonify(ORM.Operations.QueryFootballLeagues())
+
+@app.route('/leagues/league')
+def league():
+  league = loads(request.args.get('league', default = None, type = str))
+  return jsonify(ORM.Operations.QueryFootballLeague(league))
