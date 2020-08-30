@@ -6,7 +6,6 @@ from pprint import pprint
 import os
 import re
 from datetime import datetime
-from scrapy_selenium import SeleniumRequest
 
 if __name__ == '__main__':
   from ORM import Operations
