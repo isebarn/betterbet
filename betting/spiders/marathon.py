@@ -61,21 +61,20 @@ class RootSpider(scrapy.Spider):
     football_league_urls = [x for x in response.xpath("//td/a[@class='category-label-link']/@href").extract()
       if 'betting/Football/' in x]
 
-    for football_league_url in football_league_urls[0:1]:
+    for football_league_url in football_league_urls[0:5]:
       yield response.follow(url=football_league_url,
         callback=self.football_league_page_parser,
         errback=self.errbacktest,
         meta={'proxy': 'p.webshare.io:20000'})
 
   def football_league_page_parser(self, response):
-    '''
     # extract all league name
     league_name = ' '.join(response.xpath("//h1[@class='category-label ']/span/text()").extract())
     league_id = int(re.match('.*?([0-9]+)$', response.url).group(1))
 
     # query or save league name from database
-    league = Operations.GetOrCreateFootballLeague(league_id, league_name)
-    '''
+    league = Operations.SaveLeague({'id': league_id, 'value': league_name})
+
     # find all match urls
     football_match_urls = response.xpath("//a[@class='member-link']/@href").extract()
 
@@ -86,13 +85,14 @@ class RootSpider(scrapy.Spider):
       yield response.follow(url=football_match_url,
         callback=self.football_match_parser,
         errback=self.errbacktest,
-        meta={'proxy': 'p.webshare.io:20000'})
+        meta={'league': league.Id, 'proxy': 'p.webshare.io:20000'})
 
   def football_match_parser(self, response):
     timestamp = datetime.now()
     teams = response.xpath(self.teams).extract()
     data = {}
     data['match'] = {}
+    data['match']['league'] = response.meta.get('league')
     data['match']['competition'] = {}
     data['match']['competition']['id'] = int(response.url.split("+")[-1])
     data['match']['competition']['date'] = parse_date(response.xpath(self.time).extract_first().split())

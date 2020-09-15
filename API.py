@@ -10,9 +10,9 @@ app = Flask(__name__)
 app.config['CORS_HEADERS'] = 'Content-Type'
 cors = CORS(app, resources={r"*": {"origins": os.environ.get('WEB')}})
 
-@app.route('/')
+@app.route('/match')
 def root():
-  return jsonify(ORM.Operations.QueryFootballMatch())
+  return jsonify(ORM.Operations.QueryFootball())
 
 @app.route('/leagues')
 def leagues():

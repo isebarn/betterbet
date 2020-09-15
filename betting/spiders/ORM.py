@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker, aliased, relationship, joinedload, lazy
 import datetime
 from pprint import pprint
 
+#engine = create_engine("postgres://betting:betting123@192.168.1.35:5432/betting", echo=False)
 engine = create_engine(os.environ.get('BETTING_DATABASE'), echo=False)
 Base = declarative_base()
 
@@ -15,6 +16,13 @@ def json_object(_object):
   data.pop('_sa_instance_state', None)
   return data
 
+def json_child_list(data, name):
+  if name in data:
+    data[name] = [_object.json() for _object in data[name]]
+
+def json_child_object(data, name):
+  if name in data:
+    data[name] = data[name].json()
 
 # Collection is a generic Market type
 class Collection(Base):
@@ -45,7 +53,7 @@ class Market(Base):
 
   def json(self):
     data = json_object(self)
-    data['prices'] = [price.json() for price in data['prices']]
+    json_child_list(data, 'prices')
     return data
 
 class PriceField(Base):
@@ -84,7 +92,7 @@ class Price(Base):
 
   def json(self):
     data = json_object(self)
-    data['increments'] = [increment.json() for increment in data['increments']]
+    json_child_list(data, 'increments')
     data['CurrentPrice'] = data['Value'] + sum([x['Value'] for x in data['increments']])
     return data
 
@@ -132,7 +140,8 @@ class Competition(Base):
 
   def json(self):
     data = json_object(self)
-    data['markets'] = [market.json() for market in data['markets']]
+    json_child_list(data, 'markets')
+
     return data
 
 class Match(Base):
@@ -142,6 +151,7 @@ class Match(Base):
   Competition = Column('competition', Integer, ForeignKey('competition.id'))
   Home = Column('home', Integer, ForeignKey('competitor.id'))
   Away = Column('away', Integer, ForeignKey('competitor.id'))
+  League = Column('league', Integer, ForeignKey('league.id'))
   competition = relationship('Competition', lazy="joined")
   home = relationship('Competitor', lazy="joined", primaryjoin= Home == Competitor.Id)
   away = relationship('Competitor', lazy="joined", primaryjoin= Away == Competitor.Id)
@@ -150,12 +160,29 @@ class Match(Base):
     self.Competition = data['competition']['id']
     self.Home = data['home']['id']
     self.Away = data['away']['id']
+    self.League = data['league']
 
   def json(self):
     data = json_object(self)
-    data['competition'] = data['competition'].json()
-    data['home'] = data['home'].json()
-    data['away'] = data['away'].json()
+    json_child_object(data, 'competition')
+    json_child_object(data, 'home')
+    json_child_object(data, 'away')
+    return data
+
+class League(Base):
+  __tablename__ = 'league'
+
+  Id = Column('id', Integer, primary_key=True)
+  Value = Column('value', String)
+  matches = relationship('Match', lazy="joined")
+
+  def __init__(self, data):
+    self.Id = data['id']
+    self.Value = data['value']
+
+  def json(self):
+    data = json_object(self)
+    json_child_list(data, 'matches')
     return data
 
 class Football(Base):
@@ -170,12 +197,21 @@ class Football(Base):
 
   def json(self):
     data = json_object(self)
-    data['match'] = data['match'].json()
+    json_child_object(data, 'match')
 
     return data
 
 
 class Operations:
+  def SaveLeague(data):
+    league = session.query(League).filter_by(Id=data['id']).first()
+    if league == None:
+      league = League(data)
+      session.add(league)
+      session.commit()
+
+    return league
+
   def SaveFootball(data):
     competition = session.query(Competition).filter_by(Id=data['match']['competition']['id']).first()
     # If first time scraping, create new stuff
@@ -271,7 +307,19 @@ class Operations:
 
     competitor_data['id'] = competitor.Id
 
+  def QueryFootball():
+    return list(
+      map(Football.json,
+          session.query(Football)
+          .options(lazyload('match.competition.markets'))
+          .all()))
 
+  def QueryLeague():
+    return list(
+      map(League.json,
+        session.query(League)
+        .options(lazyload('matches'))
+        .all()))
 
 Base.metadata.create_all(engine)
 Session = sessionmaker()
@@ -291,10 +339,4 @@ if __name__ == "__main__":
   data = get_data()
   Operations.SaveFootball(data)
   '''
-
-
-
-
-  #pprint(new_prices)
-  #Operations.SaveFootball(data)
-  pprint(session.query(Football).first().json())
+  pprint(Operations.QueryLeague())
