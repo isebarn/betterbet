@@ -1,0 +1,219 @@
+
+Need to store data for two different scenarios
+Need to store for storage sake
+need also to store some data to decide how to present the data on the web
+
+A table needs to map the labels in a general way so that many sites can be mixed together
+
+What is the best way to store the data?
+What are the options?
+Options are:
+  1) We could store every field, fx '1st_Half___Full_Time.HH' in a KV table.
+  It's fast and very readable.
+  An entry could look like
+  id=11, value='1st_Half___Full_Time.HH'
+  id=22, value='1st_Half___Full_Time.DH'
+
+  and the numeric values could be stored in a object that references this and it's owner
+  if there is an entry for any sport
+  id=321, competitorA=1, competitorB=2, date=x, url=x
+
+  And values stored
+  id=199, competition=321, entry=22,
+    value=1.23, value_increments=[1,-1,-3,1],
+    time=01.01.01 13:00, time_increments=[500,100,150,200] (seconds)
+
+This way if you need the data for compeition with id=321 you can
+get the competitors, date, url and all values stored, like entry 22
+
+This way we utilize the array type of postgres. I dont know how fast it is.
+A different version would be using another table instead of arrays, KVD table
+id=1, stored_value=199, value_increment=1, time_increment=500
+
+This requires more fetches, but is easier to insert into. However, every single insertion requires fetches, so maybe the list version is faster. So which will be slower, 1) updating the list column, or fetching from the table.
+
+Marathon has a field called data-mutable-id, which is no ID at all but it is unique
+
+
+We need to show the data properly
+Let's invent a new structure that both stores and presents the data properly
+
+Could I generate tables from the page?
+Probably
+
+DataTable has a type id (called data_mutable_id) and a header
+A column belongs to a table
+A row belongs to a table
+A value belongs to a row and a column
+An increment belongs to a value
+
+Some cells have their description inside them and therefore dont need column definitions. See Correct Score column
+
+
+The scraper finds all tables
+[{id=1,, type_id=MG431_-635082837, header='Correct Score'...etc]
+
+
+Let's start simple with the 'Results' table
+This one has
+data-mutable-id=MG652_-678920046
+All tables have class='market-table-name'
+We start by searching all these data-mutable-id's in divs
+Then we find those tables ID's
+
+Note that this logic wont have to run that often, it's to populate a database
+The first thing is simply to find the preference_ids to compare to the db and to populate new if any (rarely)
+
+
+
+We have for every match the 'data' attribute
+
+We save into table Field every single field
+First time we scrape for a given event, we create a row in the FieldValue table, pointing to the Field table and the competition table
+
+We create a Football item
+This points to the Match Item
+Match item points to a
+  Competition Item
+
+Then we populate the scraped data
+We create a Field
+  From the Field, we create a FieldValue. First time it gets a value.
+  And the field value has a list of Increments, those are populated later
+
+Let's populate the Football table
+It needs
+  A match
+
+  To populate a match we need
+  a competition
+  a home team
+  an away team
+
+    a competition needs an Id and a Date
+    a home team needs a competitor.
+      A competitor needs a name
+    an away team needs a competitor
+      A competitor needs a name
+
+'football':{
+  'match': {
+    'competition': {
+      'id': "",
+      'date': ""
+    },
+    'home': {
+      'competitor': {
+        'name': ""
+      }
+    },
+    'away': {
+      'competitor': {
+        'name': ""
+      }
+    }
+  }
+}
+
+if the id already exists in competition.id we dont need to save this part again
+We just need to create Football once
+If it does not, we need to check if the competitors exists, and if not, create them
+
+Now we need to query football as well
+
+Now we need to save the data
+
+Top value is FieldValue
+  A FieldValue has:
+    Field
+      A field has an id (data-mutable-id)
+      A field has a Collection
+        A Collection has a name
+    FieldValueIncreament
+      which has a value
+VAL-PRICE line has only 1 column, value anchored to the left, and price to the right
+  only td elements, val on left, price on right
+
+Fulham     |  1.04
+Arsenal    |  3.55
+
+VAL-OPTIONS line has a value on the left, and 1 or more columns with options
+  first tr has N th elements with descriptions
+  other tr have N td elements with prices
+
+           | First Goal | Second Goal
+Fulham     |  1.04      |     3.22
+Arsenal    |  3.55      |     5.33
+
+OPTIONS line has 1 or more columns with prices
+  first tr has N th elements with descriptions
+  other tr have N td elements with prices
+
+|________________Number of goals__________|
+|     1 half     | Equal number  | 2 half |
+|     (1.04)     |     3.22      |   2.4  |
+
+
+VAL-OPTIONS and OPTIONS are structured exactly the same, except VAL-OPTIONS does not have any text in its first th element, and no data-sel attribute in the first td element of every row
+
+
+Should I use a CollectionType table?
+Or should the Collection table just have a json column that defines the type of table
+Or should I just label the data
+Field.Description
+
+If we have VAL-PRICE table, we save the row-label.
+Data is inside data-sel marked mn and sn
+
+
+If we have a VAL-OPTIONS table, we save the row-label + column-label
+Data is inside data-sel marked mn and sn
+
+If we have an OPTIONS table, we save the column-label
+Data is inside data-sel marked mn and sn
+
+We also save table-type, it will be necessary when deciding how to present data
+
+
+We need first to save every data entry
+
+{
+  "match": {
+    "home": {
+      "value": "Bayern Munich"
+    },
+    "away": {
+      "value": "Sevilla"
+    },
+    "competition": {
+      "date": "datetime.datetime(2020, 9, 24, 20, 0)",
+      "id": 10029560,
+      "collections": [
+        {
+          "id": "MG428_540024986Football",
+          "value": "Score Draw",
+          "headers": [
+            "Yes",
+            "No"
+          ],
+          "prices": [
+            {
+              "id": "S1582117738",
+              "mn": "Score Draw",
+              "price": "5.7",
+              "sn": "Yes",
+              "time": "datetime.datetime(2020, 9, 9, 16, 55, 10, 707069)"
+            },
+            {
+              "id": "S841701214",
+              "mn": "Score Draw",
+              "price": "1.14",
+              "sn": "No",
+              "time": "datetime.datetime(2020, 9, 9, 16, 55, 10, 707069)"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

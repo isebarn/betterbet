@@ -1,240 +1,300 @@
 import os
 import json
-from datetime import datetime
-from sqlalchemy import ForeignKey, desc, create_engine, func, Column, BigInteger, Integer, Float, String, Boolean, DateTime, Text
+from sqlalchemy import ForeignKey, ForeignKeyConstraint, desc, create_engine, func, Column, SmallInteger, BigInteger, Integer, Float, String, Boolean, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import sessionmaker, aliased, relationship, joinedload, lazyload
-from datetime import datetime
+import datetime
 from pprint import pprint
 
 engine = create_engine(os.environ.get('BETTING_DATABASE'), echo=False)
 Base = declarative_base()
 
-class FootballError(Base):
-  __tablename__ = 'football_error'
+def json_object(_object):
+  data = dict(_object.__dict__)
+  data.pop('_sa_instance_state', None)
+  return data
 
-  Id = Column('id', Integer, primary_key=True)
+
+# Collection is a generic Market type
+class Collection(Base):
+  __tablename__ = 'collection'
+
+  Id = Column('id', String, primary_key=True)
   Value = Column('value', String)
-
-  def __init__(self, value):
-    self.Value = value
-
-class FootballTeam(Base):
-  __tablename__ = 'football_team'
-
-  Id = Column('id', Integer, primary_key=True)
-  Value = Column('value', String)
-
-  def __init__(self, value):
-    self.Value = value
-
-  def json_object(self):
-    data = dict(self.__dict__)
-    data.pop('_sa_instance_state', None)
-    return data
-
-class FootballOdds(Base):
-  __tablename__ = 'football_odds'
-  keys = ['_1','_x','_2','_h1','_h2','_u','_o']
-
-  Id = Column('id', Integer, primary_key=True)
-  Match = Column('match', Integer, ForeignKey('football_match.id'))
-  _1 = Column('_1', Integer)
-  _X = Column('_x', Integer)
-  _2 = Column('_2', Integer)
-  _H1 = Column('_h1', Integer)
-  _H2 = Column('_h2', Integer)
-  _U = Column('_u', Integer)
-  _O = Column('_o', Integer)
-  Time = Column('time', DateTime)
-  match = relationship('FootballMatch', lazy="joined", back_populates="odds")
-
-  def __init__(self, match_data, match):
-    self.normalize_data_to_integers(match_data, match)
-    self.Match = match_data['id']
-    self._1 = match_data['_1']
-    self._X = match_data['_x']
-    self._2 = match_data['_2']
-    self._H1 = match_data['_h1']
-    self._H2 = match_data['_h2']
-    self._U = match_data['_u']
-    self._O = match_data['_o']
-    self.Time = match_data['created']
-
-  def json_object(self):
-    data = dict(self.__dict__)
-    data['Time'] = data['Time'].isoformat()
-    data.pop('_sa_instance_state', None)
-    data.pop('match', None)
-    return data
-
-  def normalize_data_to_integers(self, match_data, match):
-    for key in self.keys:
-      # sum up all the odds
-      value = sum(getattr(odds, key.upper()) for odds in match.odds)/100
-
-      # add the odds to the original value
-      value += getattr(match, key.upper())
-
-      # subtract to find the new value
-      match_data[key] -= value
-      match_data[key] = int(round(match_data[key] * 100,2))
-
-class FootballLeague(Base):
-  __tablename__ = 'football_league'
-
-  # https://www.marathonbet.com/en/betting/Football/Internationals/
-  # UEFA+Nations+League/League+C/Group+Stage+-+6402506
-  # this has an id of 6402506
-  Id = Column('id', Integer, primary_key=True)
-  Value = Column('value', String)
-  matches = relationship('FootballMatch', lazy="select")
 
   def __init__(self, data):
     self.Id = data['id']
     self.Value = data['value']
 
-  def json_object(self):
-    data = dict(self.__dict__)
-    data.pop('_sa_instance_state', None)
-    data['matches'] = [match.json_object() for match in data['matches']]
-    return data
-
-class FootballMatch(Base):
-  __tablename__ = 'football_match'
+# Market is a specific collection has a collection and headers
+# and belongs to a specific competition
+class Market(Base):
+  __tablename__ = 'market'
 
   Id = Column('id', Integer, primary_key=True)
-  Home = Column('home', Integer, ForeignKey('football_team.id'))
-  Away = Column('away', Integer, ForeignKey('football_team.id'))
-  League = Column('league', Integer, ForeignKey('football_league.id'))
-  _1 = Column('_1', Float)
-  _X = Column('_x', Float)
-  _2 = Column('_2', Float)
-  _H1 = Column('_h1', Float)
-  _H2 = Column('_h2', Float)
-  _U = Column('_u', Float)
-  _O = Column('_o', Float)
-  odds = relationship(FootballOdds, lazy="joined", back_populates="match")
-  _home = relationship(FootballTeam, lazy="joined", primaryjoin= Home == FootballTeam.Id)
-  _away = relationship(FootballTeam, lazy="joined", primaryjoin= Away == FootballTeam.Id)
-  _league = relationship(FootballLeague, lazy="joined")
+  Headers = Column('headers', ARRAY(String))
+  Collection = Column('collection', String, ForeignKey('collection.id'))
+  Competition = Column('competition', Integer, ForeignKey('competition.id'))
+  prices = relationship('Price', lazy="joined")
 
+  def __init__(self, data):
+    self.Headers = data['headers']
+    self.Collection = data['id']
+    self.Competition = data['competition']
 
+  def json(self):
+    data = json_object(self)
+    data['prices'] = [price.json() for price in data['prices']]
+    return data
+
+class PriceField(Base):
+  __tablename__ = 'price_field'
+
+  Id = Column('id', String, primary_key=True)
+  Collection = Column('collection', String, ForeignKey('collection.id'), primary_key=True)
+
+  def __init__(self, data):
+    self.Id = data['id']
+    self.Collection = data['collection']
+
+class Price(Base):
+  __tablename__ = 'price'
+
+  Id = Column('id', Integer, primary_key=True)
+  PriceField = Column('price_field', String)
+  Collection = Column('collection', String)
+  Market = Column('market', Integer, ForeignKey('market.id'))
   Time = Column('time', DateTime)
-  Created = Column('created', DateTime)
+  Value = Column('value', Float)
+  MN = Column('mn', String)
+  SN = Column('sn', String)
+  increments = relationship('PriceIncrement', lazy="joined")
+  __table_args__ = (ForeignKeyConstraint([PriceField, Collection],
+                                           ['price_field.id', 'price_field.collection']), {})
 
-  def __init__(self, match):
-    self.Id = match['id']
-    self.Home = Operations.GetOrCreateFootballTeam(match['home']).Id
-    self.Away = Operations.GetOrCreateFootballTeam(match['away']).Id
-    self.League = match['league_id']
-    self._1 = match['_1']
-    self._X = match['_x']
-    self._2 = match['_2']
-    self._H1 = match['_h1']
-    self._H2 = match['_h2']
-    self._U = match['_u']
-    self._O = match['_o']
-    self.Time = match['time']
-    self.Created = match['created']
+  def __init__(self, data):
+    self.PriceField = data['id']
+    self.Collection = data['collection']
+    self.Market = data['market']
+    self.Time = data['time']
+    self.Value = data['price']
+    self.MN = data['mn']
+    self.SN = data['sn']
 
-  def json_object(self):
-    data = dict(self.__dict__)
-    data.pop('_sa_instance_state', None)
-    data['Created'] = data['Created'].isoformat()
-    data['Time'] = data['Time'].isoformat()
-    data['odds'] = [odd.json_object() for odd in data['odds']]
-    data['_home'] = data['_home'].json_object()
-    data['_away'] = data['_away'].json_object()
+  def json(self):
+    data = json_object(self)
+    data['increments'] = [increment.json() for increment in data['increments']]
+    data['CurrentPrice'] = data['Value'] + sum([x['Value'] for x in data['increments']])
+    return data
+
+
+class PriceIncrement(Base):
+  __tablename__ = 'price_increment'
+
+  Id = Column('id', Integer, primary_key=True)
+  Price = Column('price', Integer, ForeignKey('price.id'))
+  Value = Column('value', Float)
+  Time = Column('time', DateTime)
+
+  def __init__(self, data):
+    self.Price = data['Id']
+    self.Value = data['increment']
+    self.Time = data['update']
+
+  def json(self):
+    data = json_object(self)
+    return data
+
+class Competitor(Base): # Fullham, Serena Williams
+  __tablename__ = 'competitor'
+
+  Id = Column('id', Integer, primary_key=True)
+  Value = Column('value', String)
+
+  def __init__(self, data):
+    self.Value = data['value']
+
+  def json(self):
+    data = json_object(self)
+    return data
+
+class Competition(Base):
+  __tablename__ = 'competition'
+
+  Id = Column('id', Integer, primary_key=True)
+  Date = Column('time', DateTime)
+  markets = relationship('Market', lazy="joined")
+
+  def __init__(self, data):
+    self.Id = data['id']
+    self.Date = data['date']
+
+  def json(self):
+    data = json_object(self)
+    data['markets'] = [market.json() for market in data['markets']]
+    return data
+
+class Match(Base):
+  __tablename__ = 'match'
+
+  Id = Column('id', Integer, primary_key=True)
+  Competition = Column('competition', Integer, ForeignKey('competition.id'))
+  Home = Column('home', Integer, ForeignKey('competitor.id'))
+  Away = Column('away', Integer, ForeignKey('competitor.id'))
+  competition = relationship('Competition', lazy="joined")
+  home = relationship('Competitor', lazy="joined", primaryjoin= Home == Competitor.Id)
+  away = relationship('Competitor', lazy="joined", primaryjoin= Away == Competitor.Id)
+
+  def __init__(self, data):
+    self.Competition = data['competition']['id']
+    self.Home = data['home']['id']
+    self.Away = data['away']['id']
+
+  def json(self):
+    data = json_object(self)
+    data['competition'] = data['competition'].json()
+    data['home'] = data['home'].json()
+    data['away'] = data['away'].json()
+    return data
+
+class Football(Base):
+  __tablename__ = 'football'
+
+  Id = Column('id', Integer, primary_key=True)
+  Match = Column('match', Integer, ForeignKey('match.id'))
+  match = relationship('Match', lazy="joined")
+
+  def __init__(self, data):
+    self.Match = data['match']['id']
+
+  def json(self):
+    data = json_object(self)
+    data['match'] = data['match'].json()
+
     return data
 
 
 class Operations:
+  def SaveFootball(data):
+    competition = session.query(Competition).filter_by(Id=data['match']['competition']['id']).first()
+    # If first time scraping, create new stuff
+    if competition is None:
+      Operations.SaveCompetition(data['match']['competition'])
+      Operations.SaveCompetitor(data['match']['home'])
+      Operations.SaveCompetitor(data['match']['away'])
+      Operations.SaveMatch(data['match'])
 
-  def private_session():
-    PrivateSession = sessionmaker()
-    PrivateSession.configure(bind=engine)
-    return PrivateSession()
+      for collection in data['match']['competition']['collections']:
+        Operations.SaveCollection(collection)
 
-  def GetOrCreateFootballTeam(team_name):
-    if team_name in FOOTBALL_TEAM_CACHE:
-      return FOOTBALL_TEAM_CACHE[team_name]
+        # markets need competition
+        collection['competition'] = data['match']['competition']['id']
+        Operations.SaveMarket(collection)
 
+        for price in collection['prices']:
+          price['collection'] = collection['id']
+          Operations.SavePriceField(price)
+
+          price['market'] = collection['market']
+          Operations.SavePrice(price)
+
+      football = Football(data)
+      session.add(football)
+      session.commit()
+
+    # now just figure out the increments
     else:
-      team = FootballTeam(team_name)
-      session.add(team)
+      new_prices = {x['id']:x for market in data['match']['competition']['collections'] for x in market['prices']}
+      prices = {x['PriceField']: x for market in competition.json()['markets'] for x in market['prices']}
+
+      for _id, value in new_prices.items():
+        if _id in prices and new_prices[_id]['price'] != prices[_id]['CurrentPrice']:
+          prices[_id]['increment'] = new_prices[_id]['price'] - prices[_id]['CurrentPrice']
+          prices[_id]['increment'] = round(prices[_id]['increment'], 2)
+          prices[_id]['update'] = new_prices[_id]['time']
+          Operations.SavePriceIncrement(prices[_id])
+
       session.commit()
 
-      FOOTBALL_TEAM_CACHE[team_name] = team
-      return team
+  def SavePriceIncrement(data):
+    session.add(PriceIncrement(data))
 
-  def GetOrCreateFootballLeague(league_id, league_name=None):
-    if league_id in FOOTBALL_LEAGUE_CACHE:
-      return FOOTBALL_LEAGUE_CACHE[league_id]
+  def SavePrice(data):
+    if session.query(Price.Id
+        ).filter_by(PriceField=data['id'], Market=data['market']
+        ).scalar() == None:
 
-    else:
-      league = FootballLeague({'id': league_id, 'value': league_name})
-      session.add(league)
-      session.commit()
+      session.add(Price(data))
 
-      FOOTBALL_TEAM_CACHE[league_id] = league
-      return league
+  def SavePriceField(data):
+    if session.query(PriceField.Id
+        ).filter_by(Id=data['id'], Collection=data['collection']
+        ).scalar() == None:
 
-  def SaveFootballLeague(data):
-    if session.query(FootballLeague.Id).filter_by(Id=data['id']).scalar() == None:
-      session.add(FootballLeague(data))
-      session.commit()
+      session.add(PriceField(data))
 
-  def QueryFootballLeagues():
-    data = [dict(league.__dict__) for league in FOOTBALL_LEAGUE_CACHE.values()]
-    [league.pop('_sa_instance_state') for league in data]
-    return data
+  def SaveMarket(data):
+    if session.query(Market.Id
+        ).filter_by(Collection=data['id'], Competition=data['competition']
+        ).scalar() == None:
 
-  def QueryFootballLeague(league_id):
-    return Operations.private_session().query(FootballLeague
-            ).filter_by(Id=league_id
-            ).options(joinedload(FootballLeague.matches)
-            ).first().json_object()
+      market = Market(data)
+      session.add(market)
+      session.flush()
+      data['market'] = market.Id
 
-  def QueryFootballTeam():
-    return session.query(FootballTeam).all()
+  def SaveCollection(data):
+    if session.query(Collection.Id).filter_by(Id=data['id']).scalar() == None:
+      session.add(Collection(data))
 
-
-  def SaveFootball(match_data):
-    match = session.query(FootballMatch).filter_by(Id=match_data['id']).options(joinedload('odds')) .first()
+  def SaveMatch(match_data):
+    match = session.query(Match).filter_by(Competition=match_data['competition']['id']).first()
     if match == None:
-      match = FootballMatch(match_data)
+      match = Match(match_data)
       session.add(match)
-      session.commit()
+      session.flush()
 
-    else:
-      match_odds = FootballOdds(match_data, match)
+    match_data['id'] = match.Id
 
-      for key in match_odds.keys:
-        if match_data[key] != 0:
-          session.add(match_odds)
-          session.commit()
+  def SaveCompetition(competition_data):
+    competition = session.query(Competition).filter_by(Id=competition_data['id']).first()
+    if competition == None:
+      session.add(Competition(competition_data))
 
-          break
+  def SaveCompetitor(competitor_data):
+    competitor = session.query(Competitor).filter_by(Value=competitor_data['value']).first()
+    if competitor == None:
+      competitor = Competitor(competitor_data)
+      session.add(competitor)
+      session.flush()
 
-  def QueryFootballOdds(match):
-    return session.query(FootballOdds).filter_by(Match=match).all()
+    competitor_data['id'] = competitor.Id
 
-  def QueryFootballMatch(json = True):
-    return [(match.json_object() if json else match) for match in session.query(FootballMatch).all()]
 
-  def SaveFootballError(data):
-    session.add(FootballError(data))
-    session.commit()
 
 Base.metadata.create_all(engine)
 Session = sessionmaker()
 Session.configure(bind=engine)
 session = Session()
 
-FOOTBALL_TEAM_CACHE = {team.Value: team for team in  Operations.QueryFootballTeam()}
-FOOTBALL_LEAGUE_CACHE = {league.Id: league for league in session.query(FootballLeague).all()}
+#FOOTBALL_TEAM_CACHE = {team.Value: team for team in  Operations.QueryFootballTeam()}
+#FOOTBALL_LEAGUE_CACHE = {league.Id: league for league in session.query(FootballLeague).all()}
+
+def read_file(filename):
+  file = open(filename, "r")
+  return json.load(file)
 
 if __name__ == "__main__":
-  pprint(Operations.QueryFootballLeagues())
+  '''
+  from test import get_data
+  data = get_data()
+  Operations.SaveFootball(data)
+  '''
+
+
+
+
+  #pprint(new_prices)
+  #Operations.SaveFootball(data)
+  pprint(session.query(Football).first().json())

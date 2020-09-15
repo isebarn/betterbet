@@ -5,6 +5,7 @@ from time import time
 from pprint import pprint
 import os
 import re
+import json
 from datetime import datetime
 
 if __name__ == '__main__':
@@ -49,75 +50,85 @@ class RootSpider(scrapy.Spider):
   def start_requests(self):
     start_urls = ['https://www.marathonbet.com/en/all-events.htm?cpcids=all']
 
-    for url in start_urls:
+    for url in start_urls[0:1]:
       yield scrapy.Request(url=url,
         callback=self.start_page_parser,
         errback=self.errbacktest,
-        meta={'root': url})
-
-  def scrape_float_field(self, response, data_key, field):
-    field = response.xpath(self.basic_key.format(data_key, field)).extract_first(0)
-    return float(field)
-
-  def football_match_parser(self, response):
-
-    try:
-      _id = int(response.url.split("+")[-1])
-      data_key = response.xpath(self.data_key_path).extract_first().split("@")[0]
-      match = {}
-      match['id'] = _id
-      match['league_id'] = response.meta.get('league_id')
-      match['home'], match['away'] = response.xpath(self.teams).extract()
-
-      match['time'] = response.xpath(self.time).extract_first().split()
-      match['time'] = parse_date(match['time'])
-
-      match['_1'] = self.scrape_float_field(response, data_key, self._1)
-      match['_x'] = self.scrape_float_field(response, data_key, self._x)
-      match['_2'] = self.scrape_float_field(response, data_key, self._2)
-      match['_h1'] = self.scrape_float_field(response, data_key, self._h1)
-      match['_h2'] = self.scrape_float_field(response, data_key, self._h2)
-      match['_u'] = self.scrape_float_field(response, data_key, self._u)
-      match['_o'] = self.scrape_float_field(response, data_key, self._o)
-      match['created'] = datetime.now().replace(microsecond=0)
-
-      Operations.SaveFootball(match)
-
-    except Exception as e:
-      Operations.SaveFootballError("{}: {}".format(response.url, str(e)))
-
-      return
-
-
-  def football_league_page_parser(self, response):
-
-    # extract all league name
-    league_name = ' '.join(response.xpath("//h1[@class='category-label ']/span/text()").extract())
-    league_id = int(re.match('.*?([0-9]+)$', response.url).group(1))
-
-    # query or save league name from database
-    league = Operations.GetOrCreateFootballLeague(league_id, league_name)
-
-    # find all match urls
-    football_match_urls = response.xpath("//a[@class='member-link']/@href").extract()
-
-    # follow all match urls
-    for football_match_url in football_match_urls:
-
-      yield response.follow(url=football_match_url,
-        callback=self.football_match_parser,
-        errback=self.errbacktest,
-        meta={'league_id': league.Id})
+        meta={'root': url, 'proxy': 'p.webshare.io:20000'})
 
   def start_page_parser(self, response):
     #football
     football_league_urls = [x for x in response.xpath("//td/a[@class='category-label-link']/@href").extract()
       if 'betting/Football/' in x]
 
-    for football_league_url in football_league_urls:
+    for football_league_url in football_league_urls[0:1]:
       yield response.follow(url=football_league_url,
         callback=self.football_league_page_parser,
-        errback=self.errbacktest)
+        errback=self.errbacktest,
+        meta={'proxy': 'p.webshare.io:20000'})
+
+  def football_league_page_parser(self, response):
+    '''
+    # extract all league name
+    league_name = ' '.join(response.xpath("//h1[@class='category-label ']/span/text()").extract())
+    league_id = int(re.match('.*?([0-9]+)$', response.url).group(1))
+
+    # query or save league name from database
+    league = Operations.GetOrCreateFootballLeague(league_id, league_name)
+    '''
+    # find all match urls
+    football_match_urls = response.xpath("//a[@class='member-link']/@href").extract()
+
+    # follow all match urls
+    #for football_match_url in football_match_urls[0:1]:
+    for football_match_url in football_match_urls[0:1]:
+
+      yield response.follow(url=football_match_url,
+        callback=self.football_match_parser,
+        errback=self.errbacktest,
+        meta={'proxy': 'p.webshare.io:20000'})
+
+  def football_match_parser(self, response):
+    timestamp = datetime.now()
+    teams = response.xpath(self.teams).extract()
+    data = {}
+    data['match'] = {}
+    data['match']['competition'] = {}
+    data['match']['competition']['id'] = int(response.url.split("+")[-1])
+    data['match']['competition']['date'] = parse_date(response.xpath(self.time).extract_first().split())
+    data['match']['home'] = {'value': teams[0]}
+    data['match']['away'] = {'value': teams[1]}
+    data['match']['competition']['collections'] = []
+
+    # We start by searching all these data-mutable-id's in divs
+    table_divs = response.xpath("//div[@data-preference-id]")
+    table_divs = [x for x in table_divs if len(x.xpath(".//td[@data-mutable-id]")) > 0]
+
+    for table in table_divs:
+      unit = {}
+      unit['id'] = table.xpath(".//@data-preference-id").get()
+      unit['value'] = table.xpath(".//div[@class='name-field']/text()").get().strip()
+      unit['headers'] = [x.strip() for x in table.xpath(".//tr/th/text()").extract()]
+
+      table_data = table.xpath(".//table")[1].xpath(".//td[@data-sel]")
+      data_mutable_ids = [x.xpath(".//@data-mutable-id").extract_first() for x in table_data]
+      data_sel = [json.loads(x.xpath(".//@data-sel").extract_first()) for x in table_data]
+      unit['prices'] = []
+      for _id, sel in zip(data_mutable_ids, data_sel):
+        item = {}
+        item['id'] = _id
+        item['price'] = round(float(sel['epr']), 2)
+        item['sn'] = sel['sn']
+        item['mn'] = sel['mn']
+        item['time'] = timestamp
+        unit['prices'].append(item)
+
+      data['match']['competition']['collections'].append(unit)
+
+    start = time()
+    Operations.SaveFootball(data)
+    print("Save: {}".format(time() - start))
+
 
   def errbacktest(self, failiure):
     pass
