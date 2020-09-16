@@ -80,7 +80,7 @@ class RootSpider(scrapy.Spider):
 
     # follow all match urls
     #for football_match_url in football_match_urls[0:1]:
-    for football_match_url in football_match_urls[0:1]:
+    for football_match_url in football_match_urls[0:5]:
 
       yield response.follow(url=football_match_url,
         callback=self.football_match_parser,

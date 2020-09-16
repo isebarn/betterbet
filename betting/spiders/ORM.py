@@ -7,8 +7,8 @@ from sqlalchemy.orm import sessionmaker, aliased, relationship, joinedload, lazy
 import datetime
 from pprint import pprint
 
-#engine = create_engine("postgres://betting:betting123@192.168.1.35:5432/betting", echo=False)
-engine = create_engine(os.environ.get('BETTING_DATABASE'), echo=False)
+engine = create_engine("postgres://betting:betting123@192.168.1.35:5432/betting", echo=False)
+#engine = create_engine(os.environ.get('BETTING_DATABASE'), echo=False)
 Base = declarative_base()
 
 def json_object(_object):
@@ -35,6 +35,10 @@ class Collection(Base):
     self.Id = data['id']
     self.Value = data['value']
 
+  def json(self):
+    data = json_object(self)
+    return data
+
 # Market is a specific collection has a collection and headers
 # and belongs to a specific competition
 class Market(Base):
@@ -45,6 +49,7 @@ class Market(Base):
   Collection = Column('collection', String, ForeignKey('collection.id'))
   Competition = Column('competition', Integer, ForeignKey('competition.id'))
   prices = relationship('Price', lazy="joined")
+  collection = relationship("Collection", lazy="joined")
 
   def __init__(self, data):
     self.Headers = data['headers']
@@ -54,6 +59,7 @@ class Market(Base):
   def json(self):
     data = json_object(self)
     json_child_list(data, 'prices')
+    json_child_object(data, 'collection')
     return data
 
 class PriceField(Base):
@@ -314,12 +320,27 @@ class Operations:
           .options(lazyload('match.competition.markets'))
           .all()))
 
-  def QueryLeague():
+  def QueryLeagueList():
     return list(
       map(League.json,
         session.query(League)
         .options(lazyload('matches'))
         .all()))
+
+  def QueryLeague(league):
+    return session.query(League
+      ).options(lazyload('matches.competition.markets')
+      ).get(league).json()
+
+  def QueryCompetition(competition):
+    return session.query(Competition
+      ).options(lazyload('markets.prices')
+      ).get(competition).json()
+
+  def QueryPrices(market, collection):
+    return list(map(Price.json, session.query(Price
+      ).filter_by(Market=market, Collection=collection
+      ).all()))
 
 Base.metadata.create_all(engine)
 Session = sessionmaker()
@@ -329,14 +350,36 @@ session = Session()
 #FOOTBALL_TEAM_CACHE = {team.Value: team for team in  Operations.QueryFootballTeam()}
 #FOOTBALL_LEAGUE_CACHE = {league.Id: league for league in session.query(FootballLeague).all()}
 
+def val_options_table(data):
+  unique_rows = list(set([item['MN'] for item in data]))
+  for row in unique_rows:
+    cols = [{'Time': item['Time'], 'MN': row, item['SN']: item['Value'], 'increments': item['increments']} for item in data if item['MN'] == row]
+
+
+    all_times = [x['increments'] for x in cols]
+    all_times = list(set([item['Time'] for sublist in all_times for item in sublist]))
+
+    res = []
+    for col in cols:
+      times = [x['Time'] for x in col['increments']]
+      missing_times = list(set(all_times) - set(times))
+      for time in missing_times:
+        col['increments'].append({ 'Time': time, 'Value': 0 })
+
+    pprint(cols)
+
+    break
+
 def read_file(filename):
   file = open(filename, "r")
   return json.load(file)
 
 if __name__ == "__main__":
-  '''
+  ''' MG431_-635082837Football 229
   from test import get_data
   data = get_data()
   Operations.SaveFootball(data)
   '''
-  pprint(Operations.QueryLeague())
+  data = Operations.QueryPrices(2271, 'MG636_-48400775Football')
+  pprint(val_options_table(data))
+  #pprint(Operations.QueryCompetition(10103621))
