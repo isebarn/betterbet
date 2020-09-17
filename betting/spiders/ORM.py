@@ -328,10 +328,10 @@ class Operations:
         .options(lazyload('matches'))
         .all()))
 
-  def QueryLeague(league):
-    return session.query(League
-      ).options(lazyload('matches.competition.markets')
-      ).get(league).json()
+  def QueryLeague(league, start_date = None, end_date = None):
+    return list(map(Match.json, session.query(Match
+      ).options(lazyload('competition.markets')
+      ).filter_by(League=league).all()))
 
   def QueryCompetition(competition):
     return session.query(Competition
@@ -427,6 +427,7 @@ if __name__ == "__main__":
   data = get_data()
   Operations.SaveFootball(data)
   '''
-  data = Operations.QueryPrices(2271, 'MG636_-48400775Football')
-  pprint(list(val_options_table(data)))
+  #data = Operations.QueryPrices(2271, 'MG636_-48400775Football')
+  #pprint(list(val_options_table(data)))
+  pprint(Operations.QueryLeague(21520, datetime.datetime.now()))
   #pprint(Operations.QueryCompetition(10103621))
