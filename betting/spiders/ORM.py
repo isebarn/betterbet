@@ -255,7 +255,8 @@ class Operations:
           prices[_id]['increment'] = new_prices[_id]['price'] - prices[_id]['CurrentPrice']
           prices[_id]['increment'] = round(prices[_id]['increment'], 2)
           prices[_id]['update'] = new_prices[_id]['time']
-          Operations.SavePriceIncrement(prices[_id])
+          if prices[_id]['increment'] != 0:
+            Operations.SavePriceIncrement(prices[_id])
 
       session.commit()
 
@@ -351,24 +352,70 @@ session = Session()
 #FOOTBALL_LEAGUE_CACHE = {league.Id: league for league in session.query(FootballLeague).all()}
 
 def val_options_table(data):
+  #pprint(data[0])
   unique_rows = list(set([item['MN'] for item in data]))
   for row in unique_rows:
-    cols = [{'Time': item['Time'], 'MN': row, item['SN']: item['Value'], 'increments': item['increments']} for item in data if item['MN'] == row]
+    cols = [{'Time': item['Time'], 'MN': row, 'Value': item['Value'], 'Header': item['SN'], 'increments': item['increments']} for item in data if item['MN'] == row]
 
 
     all_times = [x['increments'] for x in cols]
     all_times = list(set([item['Time'] for sublist in all_times for item in sublist]))
 
-    res = []
+    # Because we dont save 0 values in increments, we need to add them
+    # to the data that get's presented in the table
     for col in cols:
       times = [x['Time'] for x in col['increments']]
       missing_times = list(set(all_times) - set(times))
       for time in missing_times:
         col['increments'].append({ 'Time': time, 'Value': 0 })
 
-    pprint(cols)
+    # Remove uneccesary data
+    for col in cols:
+      for increment in col['increments']:
+        increment.pop('Price', None)
+        increment.pop('Id', None)
 
-    break
+    # Sort cols w.r.t time
+    for col in cols:
+      col['increments'].sort(key=lambda x: x['Time'])
+
+    # Add the first element to the increments list
+    for col in cols:
+      tmp = dict(col)
+      tmp.pop('increments')
+      tmp['Increment'] = 0
+      col['increments'].insert(0, tmp)
+
+    # Merge the lists and normalize them so that all fields are present everywhere
+    merged = [col['increments'] for col in cols]
+    for merge in merged:
+      price = merge[0]['Value']
+      for item in merge[1:]:
+        item['Increment'] = item['Value']
+        price += round(item['Value'], 2)
+        item['Value'] = round(price, 2)
+        item['Header'] = merge[0]['Header']
+
+
+    # Format the list into their final format
+    day = merged[0][0]['Time'].day
+    for i,v in enumerate(merged[0]):
+      item = {}
+      item['Time'] = v['Time']
+      item['Day'] = v['Time'].day != day
+      day = item['Time'].day
+      for j,k in enumerate(merged):
+        if 'MN' in k[i]:
+          item['Description'] = k[i]['MN']
+
+        item[k[i]['Header']] = {
+          'Value': k[i]['Value'],
+          'Increment': k[i]['Increment'],
+        }
+
+      yield item
+
+
 
 def read_file(filename):
   file = open(filename, "r")
@@ -381,5 +428,5 @@ if __name__ == "__main__":
   Operations.SaveFootball(data)
   '''
   data = Operations.QueryPrices(2271, 'MG636_-48400775Football')
-  pprint(val_options_table(data))
+  pprint(list(val_options_table(data)))
   #pprint(Operations.QueryCompetition(10103621))
