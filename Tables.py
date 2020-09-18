@@ -78,32 +78,38 @@ def val_options_table(data):
 
       yield item
 def tables (collection, data):
-  if collection in ["MG431_-635082837Football", "MG432_1203124766Football", "MG433_1273570990Football"]:
-    '''
-    ADD
-    Correct score
-    1st half correct score
-    2nd half correct score
+  if collection in [
+    "MG431_-635082837Football", # Correct score
+    "MG432_1203124766Football", # 1st half correct score
+    "MG433_1273570990Football",  # 2nd half correct score
+    ]:
 
-    Maybe:
-      1st half + Full time
-      1st half + 2nd Half
-    '''
 
     return list(options_table(data))
 
-  elif collection in ["MG636_-48400775Football"]:
-    '''
-    ADD
-    Winning margin
-    Winning method
+  elif collection in [
+    "MG636_-48400775Football", # Winning margin
+    "MG637_454400094Football",  # Winning method
+    "MG749_-1148862153Football", # Team To Score + Result
+    "MG267_-572852200Football", # Full Time Result + Total Goals
+    "MG269_827066176Football", # Total Goals, Halves
+    "MG260_-1655453786Football", # Goals
+    "MG262_807991303Football", # 1st Goal + Full Time Result
+    "MG266_190050240Football", # Halves Result
+    "MG261_1113847840Football", # Goals + Half Result
+    "MG830_782012322Football", # 2nd Half Result + 2nd Half Total Goals180.00
 
-    Maybe:
-      Score Draw
-      Half with most goals
-      Half with First goal
+    ]:
 
-    '''
     return list(val_options_table(data))
+
+  '''
+  Yes - No
+  "MG428_540024986Football", # Score Draw 
+  "MG236_-1953818769Football", # To Win Match With Handicap
+  "MG236_439287476Football", # To Win Match With Handicap (3 way)
+  "MG228_-149261393Football", # To Win Match With Asian Handicap
+  '''
+
 
   return []

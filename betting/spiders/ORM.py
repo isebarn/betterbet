@@ -209,6 +209,23 @@ class Football(Base):
 
 
 class Operations:
+  def SaveAndUpdateCollectionsAndPrices(data):
+    for collection in data['match']['competition']['collections']:
+      Operations.SaveCollection(collection)
+
+      # markets need competition
+      collection['competition'] = data['match']['competition']['id']
+      Operations.SaveMarket(collection)
+
+      for price in collection['prices']:
+        price['collection'] = collection['id']
+        Operations.SavePriceField(price)
+
+        price['market'] = collection['market']
+        Operations.SavePrice(price)
+
+    session.commit()
+
   def SaveLeague(data):
     league = session.query(League).filter_by(Id=data['id']).first()
     if league == None:
@@ -227,19 +244,7 @@ class Operations:
       Operations.SaveCompetitor(data['match']['away'])
       Operations.SaveMatch(data['match'])
 
-      for collection in data['match']['competition']['collections']:
-        Operations.SaveCollection(collection)
-
-        # markets need competition
-        collection['competition'] = data['match']['competition']['id']
-        Operations.SaveMarket(collection)
-
-        for price in collection['prices']:
-          price['collection'] = collection['id']
-          Operations.SavePriceField(price)
-
-          price['market'] = collection['market']
-          Operations.SavePrice(price)
+      Operations.SaveAndUpdateCollectionsAndPrices(data)
 
       football = Football(data)
       session.add(football)
@@ -247,6 +252,9 @@ class Operations:
 
     # now just figure out the increments
     else:
+      Operations.SaveAndUpdateCollectionsAndPrices(data)
+      competition = session.query(Competition).filter_by(Id=data['match']['competition']['id']).first()
+
       new_prices = {x['id']:x for market in data['match']['competition']['collections'] for x in market['prices']}
       prices = {x['PriceField']: x for market in competition.json()['markets'] for x in market['prices']}
 
@@ -278,14 +286,14 @@ class Operations:
       session.add(PriceField(data))
 
   def SaveMarket(data):
-    if session.query(Market.Id
-        ).filter_by(Collection=data['id'], Competition=data['competition']
-        ).scalar() == None:
-
+    market = session.query(Market).filter_by(Collection=data['id'], Competition=data['competition']).first()
+    if market == None:
       market = Market(data)
       session.add(market)
       session.flush()
-      data['market'] = market.Id
+
+    data['market'] = market.Id
+
 
   def SaveCollection(data):
     if session.query(Collection.Id).filter_by(Id=data['id']).scalar() == None:
@@ -429,5 +437,5 @@ if __name__ == "__main__":
   '''
   #data = Operations.QueryPrices(2271, 'MG636_-48400775Football')
   #pprint(list(val_options_table(data)))
-  pprint(Operations.QueryLeague(21520, datetime.datetime.now()))
-  #pprint(Operations.QueryCompetition(10103621))
+  #pprint(Operations.QueryLeague(21520, datetime.datetime.now()))
+  pprint(Operations.QueryCompetition(10103623))

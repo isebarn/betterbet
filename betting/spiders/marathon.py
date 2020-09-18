@@ -48,6 +48,14 @@ class RootSpider(scrapy.Spider):
   _o = "Total_Goals.Over_2.5"
 
   def start_requests(self):
+    if getattr(self,'test_match', '') != '':
+      yield scrapy.Request(url=self.test_match,
+        callback=self.football_match_parser,
+        errback=self.errbacktest,
+        meta={'root': self.test_match, 'proxy': 'p.webshare.io:20001'})
+
+      return
+
     start_urls = ['https://www.marathonbet.com/en/all-events.htm?cpcids=all']
 
     for url in start_urls[0:1]:
