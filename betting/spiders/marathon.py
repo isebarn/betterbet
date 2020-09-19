@@ -108,30 +108,32 @@ class RootSpider(scrapy.Spider):
     data['match']['away'] = {'value': teams[1]}
     data['match']['competition']['collections'] = []
 
-    # We start by searching all these data-mutable-id's in divs
+    # We start by searching all these data-mutable-id's/data-coeff-uuid's in divs
+    id_types = ['@data-mutable-id', '@data-coeff-uuid']
     table_divs = response.xpath("//div[@data-preference-id]")
-    table_divs = [x for x in table_divs if len(x.xpath(".//td[@data-mutable-id]")) > 0]
 
-    for table in table_divs:
-      unit = {}
-      unit['id'] = table.xpath(".//@data-preference-id").get()
-      unit['value'] = table.xpath(".//div[@class='name-field']/text()").get().strip()
-      unit['headers'] = [x.strip() for x in table.xpath(".//tr/th/text()").extract()]
+    for id_type in id_types:
+      table_type = [x for x in table_divs if len(x.xpath(".//td[{}]".format(id_type))) > 0]
+      for table in table_type:
+        unit = {}
+        unit['id'] = table.xpath(".//@data-preference-id").get()
+        unit['value'] = table.xpath(".//div[@class='name-field']/text()").get().strip()
+        unit['headers'] = [x.strip() for x in table.xpath(".//tr/th/text()").extract()]
 
-      table_data = table.xpath(".//table")[1].xpath(".//td[@data-sel]")
-      data_mutable_ids = [x.xpath(".//@data-mutable-id").extract_first() for x in table_data]
-      data_sel = [json.loads(x.xpath(".//@data-sel").extract_first()) for x in table_data]
-      unit['prices'] = []
-      for _id, sel in zip(data_mutable_ids, data_sel):
-        item = {}
-        item['id'] = _id
-        item['price'] = round(float(sel['epr']), 2)
-        item['sn'] = sel['sn']
-        item['mn'] = sel['mn']
-        item['time'] = timestamp
-        unit['prices'].append(item)
+        table_data = table.xpath(".//table")[1].xpath(".//td[@data-sel]")
+        data_mutable_ids = [x.xpath(".//{}".format(id_type)).extract_first() for x in table_data]
+        data_sel = [json.loads(x.xpath(".//@data-sel").extract_first()) for x in table_data]
+        unit['prices'] = []
+        for _id, sel in zip(data_mutable_ids, data_sel):
+          item = {}
+          item['id'] = _id
+          item['price'] = round(float(sel['epr']), 2)
+          item['sn'] = sel['sn']
+          item['mn'] = sel['mn']
+          item['time'] = timestamp
+          unit['prices'].append(item)
 
-      data['match']['competition']['collections'].append(unit)
+        data['match']['competition']['collections'].append(unit)
 
     start = time()
     Operations.SaveFootball(data)
