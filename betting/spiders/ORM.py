@@ -65,7 +65,7 @@ class Market(Base):
 class PriceField(Base):
   __tablename__ = 'price_field'
 
-  Id = Column('id', BigInteger, primary_key=True)
+  Id = Column('id', String, primary_key=True)
   Collection = Column('collection', String, ForeignKey('collection.id'), primary_key=True)
 
   def __init__(self, data):
@@ -76,7 +76,7 @@ class Price(Base):
   __tablename__ = 'price'
 
   Id = Column('id', Integer, primary_key=True)
-  PriceField = Column('price_field', BigInteger)
+  PriceField = Column('price_field', String)
   Collection = Column('collection', String)
   Market = Column('market', Integer, ForeignKey('market.id'))
   Time = Column('time', DateTime)
