@@ -121,12 +121,13 @@ class RootSpider(scrapy.Spider):
         unit['headers'] = [x.strip() for x in table.xpath(".//tr/th/text()").extract()]
 
         table_data = table.xpath(".//table")[1].xpath(".//td[@data-sel]")
-        data_mutable_ids = [x.xpath(".//{}".format(id_type)).extract_first() for x in table_data]
+        #data_mutable_ids = [x.xpath(".//{}".format(id_type)).extract_first() for x in table_data]
         data_sel = [json.loads(x.xpath(".//@data-sel").extract_first()) for x in table_data]
         unit['prices'] = []
-        for _id, sel in zip(data_mutable_ids, data_sel):
+        for sel in data_sel:
+        #for _id, sel in zip(data_mutable_ids, data_sel):
           item = {}
-          item['id'] = _id
+          item['id'] = sel['cid'] # _id
           item['price'] = round(float(sel['epr']), 2)
           item['sn'] = sel['sn']
           item['mn'] = sel['mn']
@@ -138,7 +139,6 @@ class RootSpider(scrapy.Spider):
     start = time()
     Operations.SaveFootball(data)
     print("Save: {}".format(time() - start))
-
 
   def errbacktest(self, failiure):
     pass
