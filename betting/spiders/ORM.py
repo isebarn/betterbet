@@ -65,7 +65,7 @@ class Market(Base):
 class PriceField(Base):
   __tablename__ = 'price_field'
 
-  Id = Column('id', String, primary_key=True)
+  Id = Column('id', BigInteger, primary_key=True)
   Collection = Column('collection', String, ForeignKey('collection.id'), primary_key=True)
 
   def __init__(self, data):
@@ -76,7 +76,7 @@ class Price(Base):
   __tablename__ = 'price'
 
   Id = Column('id', Integer, primary_key=True)
-  PriceField = Column('price_field', String)
+  PriceField = Column('price_field', BigInteger)
   Collection = Column('collection', String)
   Market = Column('market', Integer, ForeignKey('market.id'))
   Time = Column('time', DateTime)
@@ -356,78 +356,26 @@ Session = sessionmaker()
 Session.configure(bind=engine)
 session = Session()
 
-#FOOTBALL_TEAM_CACHE = {team.Value: team for team in  Operations.QueryFootballTeam()}
-#FOOTBALL_LEAGUE_CACHE = {league.Id: league for league in session.query(FootballLeague).all()}
-
-def val_options_table(data):
-  #pprint(data[0])
-  unique_rows = list(set([item['MN'] for item in data]))
-  for row in unique_rows:
-    cols = [{'Time': item['Time'], 'MN': row, 'Value': item['Value'], 'Header': item['SN'], 'increments': item['increments']} for item in data if item['MN'] == row]
-
-
-    all_times = [x['increments'] for x in cols]
-    all_times = list(set([item['Time'] for sublist in all_times for item in sublist]))
-
-    # Because we dont save 0 values in increments, we need to add them
-    # to the data that get's presented in the table
-    for col in cols:
-      times = [x['Time'] for x in col['increments']]
-      missing_times = list(set(all_times) - set(times))
-      for time in missing_times:
-        col['increments'].append({ 'Time': time, 'Value': 0 })
-
-    # Remove uneccesary data
-    for col in cols:
-      for increment in col['increments']:
-        increment.pop('Price', None)
-        increment.pop('Id', None)
-
-    # Sort cols w.r.t time
-    for col in cols:
-      col['increments'].sort(key=lambda x: x['Time'])
-
-    # Add the first element to the increments list
-    for col in cols:
-      tmp = dict(col)
-      tmp.pop('increments')
-      tmp['Increment'] = 0
-      col['increments'].insert(0, tmp)
-
-    # Merge the lists and normalize them so that all fields are present everywhere
-    merged = [col['increments'] for col in cols]
-    for merge in merged:
-      price = merge[0]['Value']
-      for item in merge[1:]:
-        item['Increment'] = item['Value']
-        price += round(item['Value'], 2)
-        item['Value'] = round(price, 2)
-        item['Header'] = merge[0]['Header']
-
-
-    # Format the list into their final format
-    day = merged[0][0]['Time'].day
-    for i,v in enumerate(merged[0]):
-      item = {}
-      item['Time'] = v['Time']
-      item['Day'] = v['Time'].day != day
-      day = item['Time'].day
-      for j,k in enumerate(merged):
-        if 'MN' in k[i]:
-          item['Description'] = k[i]['MN']
-
-        item[k[i]['Header']] = {
-          'Value': k[i]['Value'],
-          'Increment': k[i]['Increment'],
-        }
-
-      yield item
-
-
 
 def read_file(filename):
   file = open(filename, "r")
   return json.load(file)
+
+def options_table(data):
+  for price in data:
+    price_value = price['Value']
+    day = price['Time'].day
+    yield {'Value': price_value, 'Time': price['Time'], 'SN': price['SN'], 'increment': 0}
+    for increment in price['increments']:
+      if increment['Value'] == 0: continue
+      price_value += increment['Value']
+      yield {
+        'Value': price_value,
+        'Time': increment['Time'],
+        'increment': increment['Value'],
+        'Day': increment['Time'].day != day
+        }
+      day = increment['Time'].day
 
 if __name__ == "__main__":
   ''' MG431_-635082837Football 229
@@ -438,4 +386,11 @@ if __name__ == "__main__":
   #data = Operations.QueryPrices(2271, 'MG636_-48400775Football')
   #pprint(list(val_options_table(data)))
   #pprint(Operations.QueryLeague(21520, datetime.datetime.now()))
-  pprint(Operations.QueryCompetition(10103623))
+  #pprint(Operations.QueryCompetition(10103623))
+  data = Operations.QueryPrices(7712, 'MG652_-678920046Football')
+  #data = list(options_table(data))
+  pprint(data)
+
+
+  # view increments for a collection
+  # select * from price_field pf join price p on p.price_field = pf.id join price_increment pi on pi.price = p.id where pf.collection = 

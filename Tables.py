@@ -82,6 +82,10 @@ def tables (collection, data):
     "MG431_-635082837Football", # Correct score
     "MG432_1203124766Football", # 1st half correct score
     "MG433_1273570990Football",  # 2nd half correct score
+    "MG102_-672153446Football", # Most Corners
+    "MG652_-678920046Football", # Result
+    "MG477_1937515483Football", # 1st Half + Full Time
+    "MG479_-159054786Football", # 1st Half + 2nd Half
     ]:
 
 
