@@ -48,6 +48,7 @@ class RootSpider(scrapy.Spider):
   _o = "Total_Goals.Over_2.5"
 
   def start_requests(self):
+    #self.test_match = 'https://www.marathonbet.com/en/betting/Football/England/Premier+League/Brighton+%26+Hove+Albion+vs+Manchester+United+-+10015003'
     if getattr(self,'test_match', '') != '':
       yield scrapy.Request(url=self.test_match,
         callback=self.football_match_parser,
@@ -85,6 +86,7 @@ class RootSpider(scrapy.Spider):
 
     # find all match urls
     football_match_urls = response.xpath("//a[@class='member-link']/@href").extract()
+    football_match_urls = list(set(football_match_urls))
 
     # follow all match urls
     #for football_match_url in football_match_urls[0:1]:
@@ -108,9 +110,10 @@ class RootSpider(scrapy.Spider):
     data['match']['away'] = {'value': teams[1]}
     data['match']['competition']['collections'] = []
 
+
     # We start by searching all these data-mutable-id's in divs
     table_divs = response.xpath("//div[@data-preference-id]")
-    table_type = [x for x in table_divs if len(x.xpath(".//td[@data-mutable-id]")) > 0]
+    table_type = [x for x in table_divs if len(x.xpath(".//td[@data-coeff-uuid]")) > 0]
     for table in table_type:
       unit = {}
       unit['id'] = table.xpath(".//@data-preference-id").get()
@@ -118,12 +121,15 @@ class RootSpider(scrapy.Spider):
       unit['headers'] = [x.strip() for x in table.xpath(".//tr/th/text()").extract()]
 
       table_data = table.xpath(".//table")[1].xpath(".//td[@data-sel]")
-      data_mutable_ids = [x.xpath(".//@data-mutable-id").extract_first() for x in table_data]
+      data_coeff_ids = [x.xpath(".//@data-coeff-uuid").extract_first() for x in table_data]
       data_sel = [json.loads(x.xpath(".//@data-sel").extract_first()) for x in table_data]
       unit['prices'] = []
-      for _id, sel in zip(data_mutable_ids, data_sel):
+      for data_coeff_id, sel in zip(data_coeff_ids, data_sel):
+        # now we must find the price_field ID and the price ID
         item = {}
-        item['id'] = _id
+        item['price_field_id'], item['price_id'] = map(int, re.findall(r'[-]?\d+', data_coeff_id))
+        #item['id'] = _id
+        item['price_id'] = abs(item['price_id'])
         item['price'] = round(float(sel['epr']), 2)
         item['sn'] = sel['sn']
         item['mn'] = sel['mn']

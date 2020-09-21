@@ -7,8 +7,8 @@ from sqlalchemy.orm import sessionmaker, aliased, relationship, joinedload, lazy
 import datetime
 from pprint import pprint
 
-engine = create_engine("postgres://betting:betting123@192.168.1.35:5432/betting", echo=False)
-#engine = create_engine(os.environ.get('BETTING_DATABASE'), echo=False)
+#engine = create_engine("postgres://betting:betting123@192.168.1.35:5432/betting", echo=False)
+engine = create_engine(os.environ.get('BETTING_DATABASE'), echo=False)
 Base = declarative_base()
 
 def json_object(_object):
@@ -48,7 +48,7 @@ class Market(Base):
   Headers = Column('headers', ARRAY(String))
   Collection = Column('collection', String, ForeignKey('collection.id'))
   Competition = Column('competition', Integer, ForeignKey('competition.id'))
-  prices = relationship('Price', lazy="joined")
+  price_fields = relationship('PriceField', lazy="joined")
   collection = relationship("Collection", lazy="joined")
 
   def __init__(self, data):
@@ -65,59 +65,44 @@ class Market(Base):
 class PriceField(Base):
   __tablename__ = 'price_field'
 
-  Id = Column('id', String, primary_key=True)
-  Collection = Column('collection', String, ForeignKey('collection.id'), primary_key=True)
-
-  def __init__(self, data):
-    self.Id = data['id']
-    self.Collection = data['collection']
-
-class Price(Base):
-  __tablename__ = 'price'
-
-  Id = Column('id', Integer, primary_key=True)
-  PriceField = Column('price_field', String)
-  Collection = Column('collection', String)
+  Id = Column('id', BigInteger, primary_key=True)
   Market = Column('market', Integer, ForeignKey('market.id'))
-  Time = Column('time', DateTime)
-  Value = Column('value', Float)
   MN = Column('mn', String)
   SN = Column('sn', String)
-  increments = relationship('PriceIncrement', lazy="joined")
-  __table_args__ = (ForeignKeyConstraint([PriceField, Collection],
-                                           ['price_field.id', 'price_field.collection']), {})
+  prices = relationship('Price', lazy="joined")
 
   def __init__(self, data):
-    self.PriceField = data['id']
-    self.Collection = data['collection']
+    self.Id = data['price_field_id']
     self.Market = data['market']
-    self.Time = data['time']
-    self.Value = data['price']
     self.MN = data['mn']
     self.SN = data['sn']
 
   def json(self):
     data = json_object(self)
-    json_child_list(data, 'increments')
-    data['CurrentPrice'] = data['Value'] + sum([x['Value'] for x in data['increments']])
+    json_child_list(data, 'prices')
+
     return data
 
+class Price(Base):
+  __tablename__ = 'price'
 
-class PriceIncrement(Base):
-  __tablename__ = 'price_increment'
-
-  Id = Column('id', Integer, primary_key=True)
-  Price = Column('price', Integer, ForeignKey('price.id'))
+  Id = Column('id', BigInteger, primary_key=True)
+  Epoch = Column('time_id', BigInteger, primary_key=True)
+  PriceField = Column('price_field', Integer, ForeignKey('price_field.id'))
   Value = Column('value', Float)
   Time = Column('time', DateTime)
 
   def __init__(self, data):
-    self.Price = data['Id']
-    self.Value = data['increment']
-    self.Time = data['update']
+    self.Id = data['price_id']
+    self.Epoch = int(data['time'].timestamp())
+    self.PriceField = data['price_field_id']
+    self.Value = data['price']
+    self.Time = data['time']
 
   def json(self):
     data = json_object(self)
+    #json_child_list(data, 'increments')
+    #data['CurrentPrice'] = data['Value'] + sum([x['Value'] for x in data['increments']])
     return data
 
 class Competitor(Base): # Fullham, Serena Williams
@@ -219,9 +204,9 @@ class Operations:
 
       for price in collection['prices']:
         price['collection'] = collection['id']
+        price['market'] = collection['market']
         Operations.SavePriceField(price)
 
-        price['market'] = collection['market']
         Operations.SavePrice(price)
 
     session.commit()
@@ -250,40 +235,30 @@ class Operations:
       session.add(football)
       session.commit()
 
-    # now just figure out the increments
     else:
       Operations.SaveAndUpdateCollectionsAndPrices(data)
-      competition = session.query(Competition).filter_by(Id=data['match']['competition']['id']).first()
 
-      new_prices = {x['id']:x for market in data['match']['competition']['collections'] for x in market['prices']}
-      prices = {x['PriceField']: x for market in competition.json()['markets'] for x in market['prices']}
 
-      for _id, value in new_prices.items():
-        if _id in prices and new_prices[_id]['price'] != prices[_id]['CurrentPrice']:
-          prices[_id]['increment'] = new_prices[_id]['price'] - prices[_id]['CurrentPrice']
-          prices[_id]['increment'] = round(prices[_id]['increment'], 2)
-          prices[_id]['update'] = new_prices[_id]['time']
-          if prices[_id]['increment'] != 0:
-            Operations.SavePriceIncrement(prices[_id])
-
-      session.commit()
-
-  def SavePriceIncrement(data):
-    session.add(PriceIncrement(data))
 
   def SavePrice(data):
-    if session.query(Price.Id
-        ).filter_by(PriceField=data['id'], Market=data['market']
-        ).scalar() == None:
-
+    if session.query(Price).filter_by(Id=data['price_id']).scalar() == None:
       session.add(Price(data))
+
+    else:
+      prices = session.query(PriceField).get(data['price_field_id']).json()['prices']
+      prices.sort(key=lambda x: x['Id'])
+
+      if round(prices[0]['Value'],2) != round(data['price'],2):
+        pprint(data)
+        #session.add(Price(data))
+
 
   def SavePriceField(data):
     if session.query(PriceField.Id
-        ).filter_by(Id=data['id'], Collection=data['collection']
-        ).scalar() == None:
+        ).filter_by(Id=data['price_field_id']).scalar() == None:
 
       session.add(PriceField(data))
+      session.flush()
 
   def SaveMarket(data):
     market = session.query(Market).filter_by(Collection=data['id'], Competition=data['competition']).first()
@@ -378,6 +353,9 @@ def options_table(data):
       day = increment['Time'].day
 
 if __name__ == "__main__":
+  data = session.query(PriceField).get(-1489739615).json()['prices']
+  pprint(data)
+  pass
   ''' MG431_-635082837Football 229
   from test import get_data
   data = get_data()
@@ -387,9 +365,9 @@ if __name__ == "__main__":
   #pprint(list(val_options_table(data)))
   #pprint(Operations.QueryLeague(21520, datetime.datetime.now()))
   #pprint(Operations.QueryCompetition(10103623))
-  data = Operations.QueryPrices(7712, 'MG652_-678920046Football')
+  #data = Operations.QueryPrices(7712, 'MG652_-678920046Football')
   #data = list(options_table(data))
-  pprint(data)
+  #pprint(data)
 
 
   # view increments for a collection
